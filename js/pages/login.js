@@ -1,4 +1,4 @@
-import { authApi, api } from "../api.js";
+import { authApi, api } from "../api.js?v=2";
 import { saveToken, getToken } from "../auth.js";
 
 const notice = document.querySelector("#login-notice");

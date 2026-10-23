@@ -1,5 +1,5 @@
 import { requireLogin } from "../auth.js";
-import { propertyApi, uploadImages } from "../api.js";
+import { propertyApi, uploadImages } from "../api.js?v=2";
 import { MAX_IMAGE_SIZE_BYTES, MAX_IMAGES_PER_PROPERTY } from "../config.js";
 import { setupPage, showMessage, button, confirmAction } from "../ui.js";
 import { el, money, pageParams } from "../utils.js";
@@ -9,7 +9,23 @@ const id = pageParams().get("id");
 const content = setupPage("properties", id ? "Edit property" : "Add property");
 const heading = el("div", { class: "page-heading" }, [el("div", {}, [el("h2", { text: id ? "Edit listing" : "Create listing" }), el("p", { text: "Enter the property details. Measurements are stored in feet and square feet." })]), el("a", { href: "properties.html", class: "button button-light", text: "Back to properties" })]); content.append(heading);
 const form = el("form", { class: "stack" }); content.append(form);
-let dirty = false, savedId = id ? Number(id) : null, existingImages = [], pendingFiles = [];
+let dirty = false, savedId = id ? Number(id) : null, existingImages = [], pendingFiles = [], originalProperty = null;
+function localDateValue(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
+function saleValues(values) {
+  return {
+    status: values.get("status"),
+    buyer_name: values.get("buyer_name").trim(),
+    buyer_phone: values.get("buyer_phone").trim(),
+    buyer_whatsapp_number: values.get("buyer_whatsapp_number").trim(),
+    buyer_email: values.get("buyer_email").trim() || null,
+    sold_at: values.get("sold_at") || null,
+    sale_price: values.get("sale_price") === "" ? null : Number(values.get("sale_price")),
+  };
+}
 function field(label, name, type = "text", options = {}) {
   const wrap = el("div", { class: `field ${options.span ? "span-2" : ""}` });
   wrap.append(el("label", { for: name, text: label }));
@@ -86,7 +102,8 @@ if (id) {
   try {
     const item = await propertyApi.get(id);
     title.input.value = item.title; type.input.value = item.property_type; address.input.value = item.address; length.input.value = item.length; width.input.value = item.width; price.input.value = item.price; description.input.value = item.description || ""; lat.input.value = item.latitude ?? ""; lng.input.value = item.longitude ?? ""; maps.input.value = item.maps_url || "";
-    status.input.value = item.status; buyerName.input.value = item.buyer_name || ""; buyerPhone.input.value = item.buyer_phone || ""; buyerWhatsapp.input.value = item.buyer_whatsapp_number || ""; buyerEmail.input.value = item.buyer_email || ""; salePrice.input.value = item.sale_price ?? ""; soldDate.input.value = item.sold_at ? new Date(item.sold_at).toISOString().slice(0, 10) : "";
+    status.input.value = item.status; buyerName.input.value = item.buyer_name || ""; buyerPhone.input.value = item.buyer_phone || ""; buyerWhatsapp.input.value = item.buyer_whatsapp_number || ""; buyerEmail.input.value = item.buyer_email || ""; salePrice.input.value = item.sale_price ?? ""; soldDate.input.value = localDateValue(item.sold_at);
+    originalProperty = { property_type: item.property_type, sale: { status: item.status, buyer_name: item.buyer_name || "", buyer_phone: item.buyer_phone || "", buyer_whatsapp_number: item.buyer_whatsapp_number || "", buyer_email: item.buyer_email || null, sold_at: localDateValue(item.sold_at) || null, sale_price: item.sale_price == null ? null : Number(item.sale_price) } };
     if (item.building_details) for (const [key, control] of Object.entries({ bedrooms, kitchens, bathrooms, building_area: buildingArea, garden_area: garden, parking_area: parking })) control.input.value = item.building_details[key] ?? 0;
     existingImages = item.images || []; buildingVisibility(); statusVisibility(); calc(); renderImages(); dirty = false;
   } catch (error) { showMessage("error", error.message); }
@@ -96,16 +113,22 @@ form.addEventListener("submit", async event => {
   event.preventDefault(); if (!form.reportValidity()) return;
   const values = new FormData(form);
   const payload = { title: values.get("title").trim(), property_type: values.get("property_type"), address: values.get("address").trim(), length: Number(values.get("length")), width: Number(values.get("width")), price: Number(values.get("price")), description: values.get("description") || null, latitude: values.get("latitude") ? Number(values.get("latitude")) : null, longitude: values.get("longitude") ? Number(values.get("longitude")) : null, maps_url: values.get("maps_url") || null, building_details: null };
+  if (id && originalProperty && ["house", "flat"].includes(originalProperty.property_type) && payload.property_type === "plot" && !confirmAction("Building details will be deleted.")) return;
   if (["house", "flat"].includes(payload.property_type)) payload.building_details = { bedrooms: Number(values.get("bedrooms")), kitchens: Number(values.get("kitchens")), bathrooms: Number(values.get("bathrooms")), building_area: Number(values.get("building_area")), garden_area: Number(values.get("garden_area") || 0), parking_area: Number(values.get("parking_area") || 0) };
   if (pendingFiles.length + existingImages.length > MAX_IMAGES_PER_PROPERTY) { showMessage("error", `A property can have at most ${MAX_IMAGES_PER_PROPERTY} images.`); return; }
   save.disabled = true;
   try {
     const result = savedId ? await propertyApi.update(savedId, payload) : await propertyApi.create(payload); savedId = result.id;
-    const targetStatus = values.get("status");
-    if (targetStatus === "sold") {
-      const sale = { status: "sold", buyer_name: values.get("buyer_name"), buyer_phone: values.get("buyer_phone"), buyer_whatsapp_number: values.get("buyer_whatsapp_number"), buyer_email: values.get("buyer_email") || null, sold_at: values.get("sold_at") ? `${values.get("sold_at")}T12:00:00` : null, sale_price: values.get("sale_price") ? Number(values.get("sale_price")) : null };
+    const currentSale = saleValues(values);
+    const previousSale = originalProperty?.sale || { status: "available", buyer_name: "", buyer_phone: "", buyer_whatsapp_number: "", buyer_email: null, sold_at: null, sale_price: null };
+    const saleChanged = JSON.stringify(currentSale) !== JSON.stringify(previousSale);
+    if (currentSale.status === "sold" && saleChanged) {
+      const sale = { ...currentSale, sold_at: currentSale.sold_at ? new Date(`${currentSale.sold_at}T12:00:00`).toISOString() : null };
       await propertyApi.status(savedId, sale);
-    } else if (id && status.input.value === "available") await propertyApi.status(savedId, { status: "available" });
+    } else if (currentSale.status === "available" && saleChanged) {
+      await propertyApi.status(savedId, { status: "available" });
+    }
+    originalProperty = { property_type: payload.property_type, sale: currentSale };
     dirty = false;
     if (pendingFiles.length) await doUpload();
     if (!pendingFiles.length) { showMessage("success", "Property saved."); if (!id) setTimeout(() => { window.location.href = "properties.html"; }, 700); }

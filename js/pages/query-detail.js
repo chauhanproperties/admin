@@ -1,5 +1,5 @@
 import { requireLogin } from "../auth.js";
-import { queryApi } from "../api.js";
+import { queryApi } from "../api.js?v=2";
 import { setupPage, showMessage, showLoading, button, badge, confirmAction } from "../ui.js";
 import { el, dateTime, timeAgo, money, pageParams } from "../utils.js";
 
@@ -8,12 +8,32 @@ const id = pageParams().get("id"); const content = setupPage("queries", "Query d
 content.append(el("div", { class: "page-heading" }, [el("div", {}, [el("h2", { text: "Enquiry details" }), el("p", { text: `Query #${id || ""}` })]), el("a", { href: "queries.html", class: "button button-light", text: "Back to queries" })]));
 const host = el("div", { class: "stack" }); content.append(host); showLoading(host);
 try {
-  const item = await queryApi.get(id); host.replaceChildren();
-  const summary = el("section", { class: "card" }); summary.append(el("div", { class: "card-head" }, [el("h2", { text: "Customer message" }), badge(item.status)]));
+  let item = await queryApi.get(id); host.replaceChildren();
+  const summary = el("section", { class: "card" }), statusBadge = badge(item.status); summary.append(el("div", { class: "card-head" }, [el("h2", { text: "Customer message" }), statusBadge]));
   summary.append(el("p", { text: item.message || "No message was provided." }), el("p", { class: "muted", text: `Received ${dateTime(item.raised_at)} · ${timeAgo(item.raised_at)}` }));
-  if (item.resolved_at) summary.append(el("p", { class: "muted", text: `Resolved ${dateTime(item.resolved_at)}` }));
   const controls = el("div", { class: "actions" });
-  controls.append(item.status === "new" ? button("Mark resolved", async () => { if (!confirmAction("Mark this query resolved?")) return; try { await queryApi.resolve(id); showMessage("success", "Query resolved."); location.reload(); } catch (e) { showMessage("error", e.message); } }, "button-primary") : button("Reopen query", async () => { if (!confirmAction("Reopen this query?")) return; try { await queryApi.reopen(id); showMessage("success", "Query reopened."); location.reload(); } catch (e) { showMessage("error", e.message); } })); summary.append(controls); host.append(summary);
+  let resolvedLine = item.resolved_at ? el("p", { class: "muted", text: `Resolved ${dateTime(item.resolved_at)}` }) : null;
+  if (resolvedLine) summary.append(resolvedLine);
+  summary.append(controls); host.append(summary);
+  async function updateStatus(resolve) {
+    if (!confirmAction(resolve ? "Mark this query resolved?" : "Reopen this query?")) return;
+    try {
+      const result = resolve ? await queryApi.resolve(id) : await queryApi.reopen(id);
+      item = { ...item, status: result.status, resolved_at: result.resolved_at };
+      statusBadge.className = `badge ${item.status}`; statusBadge.textContent = item.status;
+      if (item.resolved_at && !resolvedLine) {
+        resolvedLine = el("p", { class: "muted", text: `Resolved ${dateTime(item.resolved_at)}` });
+        summary.insertBefore(resolvedLine, controls);
+      } else if (!item.resolved_at && resolvedLine) { resolvedLine.remove(); resolvedLine = null; }
+      renderStatusAction(); showMessage("success", resolve ? "Query resolved." : "Query reopened.");
+    } catch (error) { showMessage("error", error.message); }
+  }
+  function renderStatusAction() {
+    controls.replaceChildren(item.status === "new"
+      ? button("Mark resolved", () => updateStatus(true), "button-primary")
+      : button("Reopen query", () => updateStatus(false)));
+  }
+  renderStatusAction();
   const customer = item.customer; const cCard = el("section", { class: "card" }); cCard.append(el("h2", { text: "Customer" }));
   const details = el("div", { class: "detail-grid" }); for (const [label, value] of [["Name", customer?.name], ["Phone", customer?.phone], ["WhatsApp", customer?.whatsapp_number], ["Email", customer?.email || "No email on file"], ["Other queries", Math.max(0, (customer?.query_count || 1) - 1)]]) details.append(el("div", { class: "detail-item" }, [el("strong", { text: label }), el("span", { text: value ?? "—" })]));
   cCard.append(details); if (customer) cCard.append(el("a", { href: `customer-detail.html?id=${customer.id}`, class: "button button-light", text: "Open customer" })); host.append(cCard);

@@ -1,5 +1,5 @@
 import { requireLogin } from "../auth.js";
-import { propertyApi } from "../api.js";
+import { propertyApi } from "../api.js?v=2";
 import { setupPage, showMessage, showLoading, emptyState, button, badge, pagination, confirmAction } from "../ui.js";
 import { el, money, dateTime } from "../utils.js";
 
@@ -29,7 +29,8 @@ async function load() {
     const data = await propertyApi.list(params);
     if (!data.items.length) { tableHost.replaceChildren(emptyState("No properties found. Add your first property.")); return; }
     const wrap = el("div", { class: "table-wrap" }); const table = el("table"), body = el("tbody");
-    table.append(el("thead", {}, [el("tr", {}, ["Photo", "Title", "Type", "Address", "Size", "Price", "Status", "Created", "Actions"].map(text => el("th", { text }))])), body);
+    const header = el("thead", {}, [el("tr", {}, ["Photo", "Title", "Type", "Address", "Size", "Price", "Status", "Created", "Actions"].map(text => el("th", { text })))]);
+    table.append(header, body);
     data.items.forEach(item => {
       const row = el("tr"); const image = item.images?.[0] ? el("img", { class: "thumb", src: item.images[0].image_url, alt: "Property" }) : el("span", { class: "muted", text: "—" });
       const actions = el("div", { class: "actions" });
@@ -48,7 +49,7 @@ function soldDialog(item) {
   const fields = [["Buyer name", "buyer_name", "text", true], ["Phone", "buyer_phone", "tel", true], ["WhatsApp number", "buyer_whatsapp_number", "tel", true], ["Email (optional)", "buyer_email", "email", false], ["Sold date", "sold_at", "date", false], ["Sale price (optional)", "sale_price", "number", false]];
   for (const [label, name, type, required] of fields) { const wrap = el("div", { class: "field" }); wrap.append(el("label", { text: label })); const input = el("input", { name, type, required: required ? "required" : null, min: type === "number" ? "0" : null }); if (name === "sold_at") input.value = new Date().toISOString().slice(0, 10); wrap.append(input); form.append(wrap); }
   const actions = el("div", { class: "dialog-actions" }); const cancel = button("Cancel", () => dialog.close(), "button-light"); cancel.addEventListener("click", () => dialog.close()); const save = el("button", { type: "submit", class: "button button-primary", text: "Save sale" }); actions.append(cancel, save); form.append(actions); dialog.append(form); document.body.append(dialog);
-  form.addEventListener("submit", async event => { event.preventDefault(); const values = Object.fromEntries(new FormData(form)); values.status = "sold"; if (values.sold_at) values.sold_at += "T12:00:00"; if (values.sale_price === "") delete values.sale_price; if (values.buyer_email === "") delete values.buyer_email; save.disabled = true; try { await propertyApi.status(item.id, values); dialog.close(); showMessage("success", "Sale recorded."); load(); } catch (e) { showMessage("error", e.message); save.disabled = false; } });
+  form.addEventListener("submit", async event => { event.preventDefault(); const values = Object.fromEntries(new FormData(form)); values.status = "sold"; if (values.sold_at) values.sold_at = new Date(`${values.sold_at}T12:00:00`).toISOString(); if (values.sale_price === "") delete values.sale_price; if (values.buyer_email === "") delete values.buyer_email; save.disabled = true; try { await propertyApi.status(item.id, values); dialog.close(); showMessage("success", "Sale recorded."); load(); } catch (e) { showMessage("error", e.message); save.disabled = false; } });
   dialog.addEventListener("close", () => dialog.remove(), { once: true }); dialog.showModal();
 }
 for (const input of [status, type, min, max, sort]) input.addEventListener("change", () => { page = 1; load(); });

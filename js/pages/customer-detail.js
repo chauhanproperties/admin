@@ -1,5 +1,5 @@
 import { requireLogin } from "../auth.js";
-import { customerApi } from "../api.js";
+import { customerApi } from "../api.js?v=2";
 import { setupPage, showMessage, showLoading, emptyState } from "../ui.js";
 import { el, dateTime, money, pageParams } from "../utils.js";
 
@@ -12,7 +12,7 @@ try {
   const profile = el("section", { class: "card" }); profile.append(el("h2", { text: customer.name }));
   const details = el("div", { class: "detail-grid" });
   for (const [label, value] of [["Phone", customer.phone], ["WhatsApp", customer.whatsapp_number], ["Registered", dateTime(customer.registered_at)]]) details.append(el("div", { class: "detail-item" }, [el("strong", { text: label }), el("span", { text: value || "—" })]));
-  const form = el("form", { class: "form-grid", style: "margin-top:18px" });
+  const form = el("form", { class: "form-grid customer-edit-form" });
   const email = el("input", { type: "email", maxlength: "320", value: customer.email || "" }); const age = el("input", { type: "number", min: "0", max: "120", value: customer.age ?? "" });
   const gender = el("select"); [["", "Not set"], ["female", "Female"], ["male", "Male"], ["other", "Other"]].forEach(([v, label]) => gender.append(el("option", { value: v, text: label, selected: v === (customer.gender || "") ? "selected" : null })));
   for (const [label, input] of [["Email", email], ["Age", age], ["Gender", gender]]) form.append(el("div", { class: "field" }, [el("label", { text: label }), input]));
