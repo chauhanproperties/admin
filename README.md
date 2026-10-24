@@ -8,7 +8,7 @@ Serve from the parent project directory with:
 python -m http.server 8000 --bind 127.0.0.1 --directory admin
 ```
 
-Then open `http://localhost:8000`. Run the API separately from `server` on port 5000. For local login, set `DEBUG=true` in `server/.env` and copy the 8-digit code from the server terminal. The token is stored in browser local storage and expires server-side after 12 hours.
+Then open `http://localhost:8000`. Run the API separately from `server` on port 5000. For login, enter the configured `ADMIN_EMAIL` and `ADMIN_PASSWORD` from `server/.env`; the password is server-only and must be at least 16 characters. The token is stored in browser local storage and expires server-side after 12 hours.
 
 Before deployment, replace the `PRODUCTION_API_URL` placeholder in `js/config.js` with the deployed API address, and replace the matching API host placeholder in `_headers`. Local hostnames continue to use port 5000. `_headers` applies security headers on Cloudflare Pages; it does not affect local serving.
 

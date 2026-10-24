@@ -42,8 +42,7 @@ export async function api(path, options = {}) {
 }
 
 export const authApi = {
-  requestCode: email => api("/api/admin/auth/request-code", { method: "POST", body: JSON.stringify({ email }) }),
-  verifyCode: (email, code) => api("/api/admin/auth/verify-code", { method: "POST", body: JSON.stringify({ email, code }) }),
+  login: (email, password) => api("/api/admin/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
 };
 export const propertyApi = {
   list: params => api(`/api/admin/properties?${new URLSearchParams(params)}`),
